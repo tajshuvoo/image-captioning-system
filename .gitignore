@@ -230,3 +230,6 @@ models/
 
 # OS
 .DS_Store
+
+# Feature artifacts
+artifacts/
