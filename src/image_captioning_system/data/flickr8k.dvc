@@ -1,0 +1,6 @@
+outs:
+- md5: 59b711c9175aebd909aa0536abf460be.dir
+  size: 1118053179
+  nfiles: 8092
+  hash: md5
+  path: flickr8k
