@@ -1,0 +1,3 @@
+data_dir: src/image_captioning_system/data/flickr8k
+images_dir: src/image_captioning_system/data/flickr8k/Images
+captions_path: src/image_captioning_system/data/flickr8k/captions.txt
