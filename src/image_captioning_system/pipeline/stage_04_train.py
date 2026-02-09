@@ -159,7 +159,7 @@ def main():
         # -------------------------------------------------
         os.makedirs("artifacts/model", exist_ok=True)
         model_path = "artifacts/model/inceptionmodel.keras"
-        tf.keras.saving.save_model(model, model_path)
+        model.save(model_path)
 
         mlflow.log_artifact(model_path)
         mlflow.log_artifact(tokenizer_path)

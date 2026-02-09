@@ -29,7 +29,8 @@ def build_caption_model(vocab_size, max_caption_length, cnn_output_dim=2048):
 
     # 🔥 FIX: disable cuDNN
     se2 = tf.keras.layers.LSTM(
-        256
+        256,
+        use_cudnn=False
     )(se1)
 
     # -------------------------------
