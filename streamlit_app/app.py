@@ -1,12 +1,15 @@
-import tensorflow as tf
-
-
-
 import streamlit as st
+
+# 🔴 MUST be the first Streamlit command
+st.set_page_config(
+    page_title="Image Caption Generator",
+    layout="centered"
+)
+
 import numpy as np
 import pickle
 from PIL import Image
-
+import tensorflow as tf
 
 # ----------------------------
 # PATHS
@@ -21,15 +24,14 @@ MAX_LEN_PATH = "streamlit_app/max_length.txt"
 @st.cache_resource
 def load_vgg():
     base = tf.keras.applications.VGG16(weights="imagenet")
-    model = tf.keras.Model(
+    return tf.keras.Model(
         inputs=base.inputs,
         outputs=base.layers[-2].output
     )
-    return model
 
 @st.cache_resource
 def load_caption_model():
-    return tf.keras.models.load_model(MODEL_PATH)
+    return tf.keras.models.load_model(MODEL_PATH, compile=False)
 
 @st.cache_resource
 def load_tokenizer():
@@ -54,19 +56,18 @@ def extract_features(image: Image.Image):
     img = tf.keras.preprocessing.image.img_to_array(image)
     img = np.expand_dims(img, axis=0)
     img = tf.keras.applications.vgg16.preprocess_input(img)
-    feature = vgg.predict(img, verbose=0)
-    return feature
+    return vgg.predict(img, verbose=0)
 
 # ----------------------------
 # CAPTION GENERATION
 # ----------------------------
-def idx_to_word(idx, tokenizer):
+def idx_to_word(idx):
     for word, index in tokenizer.word_index.items():
         if index == idx:
             return word
     return None
 
-def predict_caption(model, feature, tokenizer, max_length):
+def predict_caption(feature):
     in_text = "start"
 
     for _ in range(max_length):
@@ -75,10 +76,10 @@ def predict_caption(model, feature, tokenizer, max_length):
             [seq], maxlen=max_length
         )
 
-        yhat = model.predict([feature, seq], verbose=0)
-        yhat = np.argmax(yhat)
+        yhat = caption_model.predict([feature, seq], verbose=0)
+        yhat = int(np.argmax(yhat))
 
-        word = idx_to_word(yhat, tokenizer)
+        word = idx_to_word(yhat)
         if word is None:
             break
 
@@ -86,19 +87,11 @@ def predict_caption(model, feature, tokenizer, max_length):
         if word == "end":
             break
 
-    # 🚨 remove start/end tokens
-    words = in_text.split()
-    words = [w for w in words if w not in ["start", "end"]]
-    return " ".join(words)
+    return " ".join(w for w in in_text.split() if w not in ("start", "end"))
 
 # ----------------------------
 # STREAMLIT UI
 # ----------------------------
-st.set_page_config(
-    page_title="Image Caption Generator",
-    layout="centered"
-)
-
 st.title("🖼️ Image Caption Generator")
 st.write("Upload an image and generate a caption using your trained model.")
 
@@ -107,23 +100,13 @@ uploaded_file = st.file_uploader(
     type=["jpg", "jpeg", "png"]
 )
 
-if uploaded_file is not None:
+if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
-
-    st.image(
-        image,
-        caption="Uploaded Image",
-        use_column_width=True
-    )
+    st.image(image, caption="Uploaded Image", use_column_width=True)
 
     with st.spinner("Generating caption..."):
         feature = extract_features(image)
-        caption = predict_caption(
-            caption_model,
-            feature,
-            tokenizer,
-            max_length
-        )
+        caption = predict_caption(feature)
 
     st.success("Caption generated!")
     st.markdown(f"### 📝 {caption}")
