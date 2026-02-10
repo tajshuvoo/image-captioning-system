@@ -2,45 +2,38 @@ import numpy as np
 import tensorflow as tf
 
 
-def generate_caption_greedy(
-    model,
-    tokenizer,
-    image_feature,
-    max_caption_length,
-):
-    """
-    Generate caption using Greedy Search
-    """
-
+def generate_caption_greedy(model, tokenizer, image_feature, max_len):
     in_text = "start"
+    used_words = set()
 
-    for _ in range(max_caption_length):
-        # Convert text to sequence
+    for _ in range(max_len):
         sequence = tokenizer.texts_to_sequences([in_text])[0]
+
         sequence = tf.keras.preprocessing.sequence.pad_sequences(
             [sequence],
-            maxlen=max_caption_length
+            maxlen=max_len,
+            padding="post"
         )
 
-        # Predict next word
         yhat = model.predict(
             [image_feature.reshape(1, -1), sequence],
             verbose=0
-        )
+        )[0]
 
-        yhat_index = np.argmax(yhat)
-
-        # Convert index to word
-        word = tokenizer.index_word.get(yhat_index)
+        yhat_idx = np.argmax(yhat)
+        word = tokenizer.index_word.get(yhat_idx)
 
         if word is None:
             break
+
+        # 🔥 REPETITION STOP
+        if word in used_words:
+            break
+        used_words.add(word)
 
         in_text += " " + word
 
         if word == "end":
             break
 
-    # Cleanup tokens
-    caption = in_text.replace("start", "").replace("end", "").strip()
-    return caption
+    return in_text.replace("start", "").replace("end", "").strip()

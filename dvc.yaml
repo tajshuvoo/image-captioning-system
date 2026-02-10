@@ -1,0 +1,29 @@
+stages:
+  ingest:
+    cmd: python src/image_captioning_system/pipeline/stage_01_ingest.py
+
+  preprocess:
+    cmd: python src/image_captioning_system/pipeline/stage_02_preprocess.py
+    deps:
+      - src/image_captioning_system/data/flickr8k
+
+  features:
+    cmd: python src/image_captioning_system/pipeline/stage_03_features.py
+    deps:
+      - src/image_captioning_system/data/flickr8k
+    outs:
+      - artifacts/features
+
+  train:
+    cmd: python src/image_captioning_system/pipeline/stage_04_train.py
+    deps:
+      - artifacts/features
+    outs:
+      - artifacts/model/inceptionmodel.keras
+      - artifacts/tokenizer/tokenizer.pkl
+
+  evaluate:
+    cmd: python src/image_captioning_system/pipeline/stage_05_evaluate.py
+    deps:
+      - artifacts/model/inceptionmodel.keras
+      - artifacts/tokenizer/tokenizer.pkl

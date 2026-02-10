@@ -5,16 +5,21 @@ from tqdm import tqdm
 
 
 def load_inception_model():
-    base_model = tf.keras.applications.inception_v3.InceptionV3(weights="imagenet")
+    base_model = tf.keras.applications.inception_v3.InceptionV3(
+        weights="imagenet"
+    )
     model = tf.keras.models.Model(
         inputs=base_model.inputs,
         outputs=base_model.layers[-2].output  # 2048-D
     )
+    model.trainable = False
     return model
 
 
 def preprocess_image(image_path):
-    img = tf.keras.preprocessing.image.load_img(image_path, target_size=(299, 299))
+    img = tf.keras.preprocessing.image.load_img(
+        image_path, target_size=(299, 299)
+    )
     img = tf.keras.preprocessing.image.img_to_array(img)
     img = np.expand_dims(img, axis=0)
     img = tf.keras.applications.inception_v3.preprocess_input(img)
@@ -31,3 +36,19 @@ def extract_features(image_ids, images_dir, model):
         features[image_id] = feature.flatten()
 
     return features
+
+
+def extract_single_image_feature(image, model, from_array=False):
+    """
+    image: path OR numpy array
+    """
+    if from_array:
+        img = tf.image.resize(image, (299, 299))
+        img = tf.keras.applications.inception_v3.preprocess_input(
+            tf.expand_dims(img, axis=0)
+        )
+    else:
+        img = preprocess_image(image)
+
+    feature = model.predict(img, verbose=0)
+    return feature.flatten()

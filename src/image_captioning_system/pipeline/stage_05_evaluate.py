@@ -18,24 +18,30 @@ from image_captioning_system.utils.metrics import compute_bleu_scores
 
 def main():
     # -------------------------------------------------
+    # Force CPU (NO cuDNN, NO Metal GPU)
+    # -------------------------------------------------
+    tf.config.set_visible_devices([], "GPU")
+
+    # -------------------------------------------------
     # Load config
     # -------------------------------------------------
     with open("config/config.yaml") as f:
         config = yaml.safe_load(f)
 
     # -------------------------------------------------
-    # Paths
-    # -------------------------------------------------
-    MODEL_PATH = "artifacts/model/inceptionmodel.keras"
-    TOKENIZER_PATH = "artifacts/tokenizer/tokenizer.pkl"
-
-    # -------------------------------------------------
     # Load tokenizer
     # -------------------------------------------------
-    with open(TOKENIZER_PATH, "rb") as f:
+    with open("artifacts/tokenizer/tokenizer.pkl", "rb") as f:
         tokenizer = pickle.load(f)
 
     vocab_size = len(tokenizer.word_index) + 1
+
+    # -------------------------------------------------
+    # Load captions
+    # -------------------------------------------------
+    captions = load_captions(config["captions_path"])
+    image_captions = build_image_caption_mapping(captions)
+    max_len = get_max_caption_length(image_captions)
 
     # -------------------------------------------------
     # Load validation features
@@ -45,94 +51,67 @@ def main():
         allow_pickle=True
     ).item()
 
-    # -------------------------------------------------
-    # Load captions → VAL ONLY
-    # -------------------------------------------------
-    captions = load_captions(config["captions_path"])
-    image_captions = build_image_caption_mapping(captions)
-
-    val_caps = {
-        k: image_captions[k]
-        for k in val_features.keys()
-    }
-
-    max_len = get_max_caption_length(image_captions)
+    val_caps = {k: image_captions[k] for k in val_features.keys()}
 
     # -------------------------------------------------
-    # 🔥 OPTION A FIX
-    # Rebuild model WITHOUT cuDNN, then load weights
+    # 🔥 Rebuild model CLEANLY (NO cuDNN)
     # -------------------------------------------------
     model = build_caption_model(
         vocab_size=vocab_size,
-        max_caption_length=max_len,
-        cnn_output_dim=2048
+        max_caption_length=max_len
     )
 
-    model.load_weights(MODEL_PATH)
+    model.load_weights("artifacts/model/inceptionmodel.keras")
 
     # -------------------------------------------------
-    # Generate predictions
+    # Limit evaluation size (FAST)
     # -------------------------------------------------
-    greedy_preds = []
-    beam_preds = []
-    references = []
+    MAX_EVAL_IMAGES = 100
+    image_ids = list(val_features.keys())[:MAX_EVAL_IMAGES]
 
-    print("🚀 Generating captions on validation set...")
+    greedy_preds, beam_preds, references = [], [], []
 
-    for image_id, feature in val_features.items():
-        # Ground-truth references
+    print(f"🚀 Evaluating on {len(image_ids)} validation images...")
+
+    for image_id in image_ids:
+        feature = val_features[image_id]
+
         refs = [
             cap.replace("start", "").replace("end", "").strip().split()
             for cap in val_caps[image_id]
         ]
         references.append(refs)
 
-        # Greedy decoding
-        greedy_caption = generate_caption_greedy(
-            model,
-            tokenizer,
-            feature,
-            max_len
+        greedy = generate_caption_greedy(
+            model, tokenizer, feature, max_len
         )
-        greedy_preds.append(greedy_caption.split())
+        greedy_preds.append(greedy.split())
 
-        # Beam search decoding
-        beam_caption = generate_caption_beam_search(
-            model,
-            tokenizer,
-            feature,
-            max_len,
-            beam_width=3
+        beam = generate_caption_beam_search(
+            model, tokenizer, feature, max_len, beam_width=3
         )
-        beam_preds.append(beam_caption.split())
+        beam_preds.append(beam.split())
 
     # -------------------------------------------------
-    # Compute BLEU-1 → BLEU-4
+    # BLEU Scores
     # -------------------------------------------------
     greedy_bleu = compute_bleu_scores(references, greedy_preds)
     beam_bleu = compute_bleu_scores(references, beam_preds)
 
-    print("\n📊 BLEU SCORES (Validation Set)")
-    print("Greedy:")
+    print("\n📊 BLEU SCORES (Validation)")
     for k, v in greedy_bleu.items():
-        print(f"  {k}: {v:.4f}")
-
-    print("\nBeam Search:")
+        print(f"Greedy {k}: {v:.4f}")
     for k, v in beam_bleu.items():
-        print(f"  {k}: {v:.4f}")
+        print(f"Beam   {k}: {v:.4f}")
 
     # -------------------------------------------------
-    # MLflow logging
+    # MLflow
     # -------------------------------------------------
     with mlflow.start_run(run_name="stage_05_evaluation"):
         for k, v in greedy_bleu.items():
             mlflow.log_metric(f"greedy_{k}", v)
-
         for k, v in beam_bleu.items():
             mlflow.log_metric(f"beam_{k}", v)
-
-        mlflow.log_artifact(MODEL_PATH)
-        mlflow.log_artifact(TOKENIZER_PATH)
 
     print("\n✅ Stage-05 evaluation complete.")
 
